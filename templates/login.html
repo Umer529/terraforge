@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Log in · TerraForge{% endblock %}
+{% block body %}
+<div class="login-wrap">
+  <form class="login form" method="post">
+    {% csrf_token %}
+    <div class="brand">{% include "logo.svg" %} TerraForge</div>
+    {% if form.errors %}<p class="error">Wrong username or password.</p>{% endif %}
+    <label>Username <input name="username" autofocus required></label>
+    <label>Password <input name="password" type="password" required></label>
+    <button class="btn primary">Log in</button>
+    <p class="muted small">Demo accounts: admin, operator, reviewer — password <code>terraforge</code></p>
+  </form>
+</div>
+{% endblock %}

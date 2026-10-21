@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Compare scans · TerraForge{% endblock %}
+{% block content %}
+<section class="panel" style="margin-bottom:14px">
+  <h2>Compare two scans of the same site</h2>
+  <form class="btn-row" id="pick">
+    <label>Before <select class="btn" name="a" required>
+      {% for s in scans %}<option value="{{ s.pk }}" data-site="{{ s.site_id }}">{{ s.title }} — {{ s.captured_at|date:"d M Y" }} ({{ s.site.name }})</option>{% endfor %}
+    </select></label>
+    <label>After <select class="btn" name="b" required>
+      {% for s in scans %}<option value="{{ s.pk }}" data-site="{{ s.site_id }}" {% if forloop.first %}selected{% endif %}>{{ s.title }} — {{ s.captured_at|date:"d M Y" }} ({{ s.site.name }})</option>{% endfor %}
+    </select></label>
+    <button class="btn primary" id="go">Compare</button>
+    <span id="msg" class="small muted"></span>
+  </form>
+</section>
+
+<div class="two" id="out" hidden>
+  <section class="panel">
+    <h2>Change between the scans</h2>
+    <div class="cards" id="cards"></div>
+    <h2 style="margin-top:16px">Elevation change map (after − before)</h2>
+    <img class="diffimg" id="diff" alt="Elevation difference">
+    <div class="legend"><span id="lo"></span><span class="ramp"></span><span id="hi"></span></div>
+    <p class="small muted" id="align"></p>
+  </section>
+  <section class="panel viewer-panel" style="position:relative;min-height:520px;padding:0;overflow:hidden">
+    <div id="viewer" class="viewer"></div>
+    <div class="viewer-bar">
+      <label class="chip"><input type="checkbox" id="show-a" checked> <span style="color:#3b7bbf">■</span> Before</label>
+      <label class="chip"><input type="checkbox" id="show-b" checked> <span style="color:#e0782a">■</span> After (aligned)</label>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/compare.js' %}"></script>{% endblock %}

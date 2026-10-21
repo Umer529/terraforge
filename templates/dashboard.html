@@ -1,0 +1,65 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}{% if current %}{{ current.title }} · {% endif %}TerraForge{% endblock %}
+{% block content %}
+<div class="dash">
+  <section class="panel scans">
+    <h2>Scan list</h2>
+    {% for s in scans %}
+      <a class="scan-item {% if current and s.pk == current.pk %}current{% endif %}" href="{% url 'scan' s.pk %}" data-scan="{{ s.pk }}">
+        <div class="t">{{ s.title }}</div>
+        <div class="m"><span>{{ s.site.name }}</span></div>
+        <div class="m"><span>{{ s.captured_at|date:"d M Y, H:i" }}</span><span class="badge {{ s.status }}">{{ s.status }}</span></div>
+      </a>
+    {% empty %}
+      <p class="muted">No scans yet.{% if can_upload %} <a href="{% url 'upload' %}">Upload one</a>.{% endif %}</p>
+    {% endfor %}
+  </section>
+
+  <section class="panel viewer-panel">
+    {% if current %}
+      <div id="viewer" class="viewer"></div>
+      <div class="viewer-bar">
+        <span class="chip" id="cloud-info">Loading…</span>
+        <span style="flex:1"></span>
+        <select class="chip" id="color-mode" title="Colour"><option value="rgb">Scanner colour</option><option value="elevation">Elevation</option></select>
+        <label class="chip">Point size <input id="point-size" type="range" min="1" max="6" value="2" style="vertical-align:middle;width:70px"></label>
+      </div>
+      <div class="hint" id="hint">Drag to rotate · right-drag to pan · scroll to zoom · click to pick a point</div>
+    {% else %}
+      <div class="empty"><div><h3>No processed scan selected</h3><p>Choose a scan from the list{% if can_upload %} or <a href="{% url 'upload' %}">upload a new capture</a>{% endif %}.</p></div></div>
+    {% endif %}
+  </section>
+
+  <section class="panel map-panel"><div id="map" style="height:100%;min-height:280px"></div></section>
+
+  <section class="panel tools">
+    <h2>Measurement tools</h2>
+    <div class="btn-row">
+      <button class="btn" data-tool="distance">Distance</button>
+      <button class="btn" data-tool="area">Area</button>
+      <button class="btn" data-tool="volume">Volume</button>
+      <button class="btn" id="clear">Clear</button>
+      <span id="finish-wrap" hidden>
+        <select id="reference" class="btn" title="Reference surface" hidden>
+          <option value="plane">Reference: plane through corners</option>
+          <option value="lowest">Reference: level at lowest corner</option>
+        </select>
+        <button class="btn primary" id="finish">Finish polygon</button>
+      </span>
+    </div>
+    <div class="result" id="result"><span class="sub">Pick a tool, then click points on the model.</span></div>
+    <table class="list" id="saved"></table>
+  </section>
+
+  <section class="panel details">
+    <h2>Scan details</h2>
+    <div id="details">{% if not current %}<p class="muted">—</p>{% endif %}</div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'vendor/leaflet/leaflet.js' %}"></script>
+<script>window.SCAN_ID = {{ current.pk|default:"null" }};</script>
+<script type="module" src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}

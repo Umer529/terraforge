@@ -1,0 +1,55 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Upload scan · TerraForge{% endblock %}
+{% block content %}
+<div class="two">
+  <section class="panel">
+    <h2>Upload a scan</h2>
+    <form class="form" id="form">
+      <label>Site
+        <select name="site_id" required>
+          {% for s in sites %}<option value="{{ s.pk }}" data-lat="{{ s.centre_lat|default:'' }}" data-lon="{{ s.centre_lon|default:'' }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Scan package or LiDAR export
+        <input type="file" name="file" required accept=".zip,.ply,.las,.laz,.obj,.xyz,.txt,.csv">
+        <span class="muted small">TerraForge app package (.zip), or a raw export from 3d Scanner App / Polycam (.ply .las .laz .obj .xyz)</span>
+      </label>
+      <label>Title <input name="title" placeholder="Taken from the package if left empty"></label>
+      <label>Notes <textarea name="notes" rows="2"></textarea></label>
+      <fieldset class="form" style="border:1px solid var(--line);border-radius:7px;padding:10px 12px">
+        <legend class="small muted">Only for raw exports without GPS</legend>
+        <div class="row">
+          <label>Latitude <input name="latitude" type="number" step="any" placeholder="e.g. 31.4815"></label>
+          <label>Longitude <input name="longitude" type="number" step="any" placeholder="e.g. 74.3030"></label>
+        </div>
+        <div class="btn-row">
+          <button type="button" class="btn" id="use-site">Use site centre</button>
+          <button type="button" class="btn" id="use-gps">Use my location</button>
+          <label style="display:flex;align-items:center;gap:6px;margin-left:auto">Up axis
+            <select name="up_axis"><option value="">Auto</option><option value="y">Y (ARKit / phone apps)</option><option value="z">Z (LAS / survey)</option></select>
+          </label>
+        </div>
+      </fieldset>
+      <div class="btn-row">
+        <button class="btn primary" id="start">Upload</button>
+        <button type="button" class="btn" id="pause" hidden>Pause (simulate signal loss)</button>
+        <button type="button" class="btn" id="resume" hidden>Resume</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Progress</h2>
+    <div id="idle" class="muted">Choose a file and press Upload. The file is sent in 2 MB chunks, each checked with SHA-256; if the connection drops, the upload resumes from the last confirmed chunk.</div>
+    <div id="progress" hidden>
+      <div class="result" style="margin:0 0 8px"><span class="big" id="pct">0%</span><span class="sub" id="ptext"></span></div>
+      <div class="progress"><div id="bar"></div></div>
+      <div class="chunks" id="chunks"></div>
+      <p id="status" class="small"></p>
+      <pre class="log" id="log" hidden></pre>
+      <p id="open" hidden><a class="btn primary" id="open-link" href="#">Open in dashboard</a></p>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/upload.js' %}"></script>{% endblock %}

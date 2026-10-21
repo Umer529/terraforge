@@ -1,0 +1,36 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TerraForge{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'vendor/leaflet/leaflet.css' %}">
+  <script type="importmap">
+    {"imports": {"three": "{% static 'vendor/three.module.js' %}", "three/OrbitControls": "{% static 'vendor/OrbitControls.js' %}"}}
+  </script>
+</head>
+<body>
+{% block body %}
+<header class="topbar">
+  <a class="brand" href="{% url 'dashboard' %}">
+    {% include "logo.svg" %}
+    TerraForge
+  </a>
+  <nav>
+    <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'scan' %}active{% endif %}">Scans</a>
+    {% if can_upload %}<a href="{% url 'upload' %}" class="{% if request.resolver_match.url_name == 'upload' %}active{% endif %}">Upload</a>{% endif %}
+    <a href="{% url 'compare' %}" class="{% if request.resolver_match.url_name == 'compare' %}active{% endif %}">Compare</a>
+    {% if role == 'admin' %}<a href="/admin/">Users &amp; sites</a>{% endif %}
+  </nav>
+  <div class="who">
+    Signed in as <strong>{{ user.username }}</strong> <span class="role">{{ role }}</span>
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button>Log out</button></form>
+  </div>
+</header>
+<main class="page">{% block content %}{% endblock %}</main>
+{% endblock %}
+<script>window.CSRF = "{{ csrf_token }}";</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Django local state
+db.sqlite3
+db.sqlite3-journal
+storage/
+staticfiles/
+
+# Generated demo data and upload resume records
+sample_data/
+*.upload.json
+
+# Raw LiDAR captures (large; keep them out of git)
+*.ply
+*.las
+*.laz
+*.obj
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Xcode (ios/)
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/**/*.xcworkspace/xcuserdata/
