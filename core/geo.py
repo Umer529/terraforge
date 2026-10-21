@@ -16,7 +16,9 @@ from PIL import Image
 from scipy.spatial import cKDTree
 
 EARTH_R = 6378137.0
-POINT_EXTS = {".ply", ".las", ".laz", ".obj", ".xyz", ".txt", ".csv"}
+MODEL_EXTS = {".glb", ".gltf"}
+POINT_EXTS = {".ply", ".las", ".laz", ".obj", ".xyz", ".txt", ".csv"} | MODEL_EXTS
+MODEL_SAMPLES = 1_200_000
 
 
 # --------------------------------------------------------------------------- loading
@@ -29,6 +31,8 @@ def load_points(path):
     """Return (xyz float64 Nx3, rgb uint8 Nx3 or None) in the file's own axes."""
     path = Path(path)
     ext = path.suffix.lower()
+    if ext in MODEL_EXTS:
+        return sample_textured_model(path)
     if ext == ".ply":
         from plyfile import PlyData
 
@@ -67,6 +71,45 @@ def load_points(path):
     raise ValueError(f"unsupported point cloud format: {ext}")
 
 
+def sample_textured_model(path, count=MODEL_SAMPLES):
+    """Sample a textured mesh (GLB/glTF) into points coloured from its photo texture."""
+    import trimesh
+
+    scene = trimesh.load(str(path), force="scene")
+    meshes = [m for m in scene.dump() if isinstance(m, trimesh.Trimesh) and len(m.faces)]
+    if not meshes:
+        raise ValueError(f"no mesh geometry in {path.name}")
+    total_area = sum(m.area for m in meshes)
+    xyz, rgb = [], []
+    for m in meshes:
+        n = max(1000, int(count * m.area / total_area))
+        pts, face = trimesh.sample.sample_surface(m, n)
+        xyz.append(pts)
+        rgb.append(_surface_colors(m, pts, face))
+    return np.vstack(xyz).astype(np.float64), np.vstack(rgb).astype(np.uint8)
+
+
+def _surface_colors(mesh, pts, face):
+    """Colour of each surface sample from the texture (UV lookup) or vertex colours."""
+    import trimesh
+
+    visual = mesh.visual
+    material = getattr(visual, "material", None)
+    image = getattr(material, "baseColorTexture", None) or getattr(material, "image", None)
+    uv = getattr(visual, "uv", None)
+    if image is not None and uv is not None:
+        bary = trimesh.triangles.points_to_barycentric(mesh.triangles[face], pts)
+        uvs = (uv[mesh.faces[face]] * bary[:, :, None]).sum(1) % 1.0
+        tex = np.asarray(image.convert("RGB"))
+        h, w = tex.shape[:2]
+        # Scanner apps bake the photo colour into the texture, so the material's
+        # colour factor is ignored (the viewer shows the texture unlit too).
+        return tex[((1 - uvs[:, 1]) * (h - 1)).astype(int), (uvs[:, 0] * (w - 1)).astype(int)]
+    if visual.kind == "vertex":
+        return np.asarray(visual.vertex_colors)[mesh.faces[face, 0], :3]
+    return np.full((len(pts), 3), 170)
+
+
 def _to_uint8(rgb):
     if rgb is None:
         return None
@@ -79,10 +122,16 @@ def _to_uint8(rgb):
     return np.clip(rgb, 0, 255).astype(np.uint8)
 
 
-def to_enu(xyz, up_axis):
+def enu_matrix(up_axis):
+    """4x4 matrix taking file axes to ENU (y-up ARKit/glTF: x, -z, y)."""
+    m = np.eye(4)
     if up_axis == "y":
-        return np.column_stack([xyz[:, 0], -xyz[:, 2], xyz[:, 1]])
-    return xyz.copy()
+        m[:3, :3] = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
+    return m
+
+
+def to_enu(xyz, up_axis):
+    return xyz @ enu_matrix(up_axis)[:3, :3].T
 
 
 # --------------------------------------------------------------------------- cleaning
@@ -153,13 +202,15 @@ def georeference(xyz, fixes, cam_track=None):
         out = xyz.copy()
         out[:, :2] = xyz[:, :2] @ r.T + t
         heading = math.degrees(math.atan2(r[1, 0], r[0, 0]))
+        m = np.eye(4)
+        m[:2, :2], m[:2, 3] = r, t
         return out, {"method": "camera path fitted to GPS track", "rms_m": round(float(residual), 2),
-                     "rotation_deg": round(heading, 1), "lat0": lat0, "lon0": lon0, "alt0": alt0}
+                     "rotation_deg": round(heading, 1), "lat0": lat0, "lon0": lon0, "alt0": alt0, "matrix": m}
 
     # Translation only: the AR session origin is where the walk started.
     acc = [f.get("horizontal_accuracy") for f in fixes if f.get("horizontal_accuracy")]
     return xyz.copy(), {"method": "anchored at first GPS fix (no heading)", "rms_m": round(float(np.median(acc)), 2) if acc else None,
-                        "rotation_deg": 0.0, "lat0": lat0, "lon0": lon0, "alt0": alt0}
+                        "rotation_deg": 0.0, "lat0": lat0, "lon0": lon0, "alt0": alt0, "matrix": np.eye(4)}
 
 
 def utm_epsg(lat, lon):

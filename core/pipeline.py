@@ -14,6 +14,7 @@ A bare .ply/.las/.obj/.xyz export (e.g. from 3d Scanner App) is accepted too.
 """
 import csv
 import json
+import shutil
 import time
 import traceback
 import zipfile
@@ -119,8 +120,10 @@ def georeference(scan, xyz, fixes, cam, up_axis, log):
         return xyz, info
     centre = np.array([*xyz[:, :2].mean(0), 0.0])
     xyz = xyz - centre
+    m = np.eye(4)
+    m[:3, 3] = -centre
     log("No GPS fixes: kept in local scan coordinates (not georeferenced)")
-    return xyz, {"method": "none", "offset": centre.tolist()}
+    return xyz, {"method": "none", "offset": centre.tolist(), "matrix": m}
 
 
 def apply_manifest(scan, manifest):
@@ -145,11 +148,20 @@ def save_fixes(scan, fixes):
     ])
 
 
-def make_outputs(job, scan, xyz, rgb, georef, log):
+def make_outputs(job, scan, xyz, rgb, georef, log, model=None):
+    """model: (path to textured GLB/glTF, 4x4 matrix from model coords to the scan frame)."""
     out = scan_dir(scan) / "out"
     out.mkdir(exist_ok=True)
     bbox = {k: round(float(v), 3) for k, v in zip(("xmin", "ymin", "zmin", "xmax", "ymax", "zmax"), [*xyz.min(0), *xyz.max(0)])}
     scan.outputs.all().delete()
+
+    if model is not None:
+        src, matrix = model
+        dest = out / f"model{src.suffix.lower()}"
+        shutil.copyfile(src, dest)
+        Output.objects.create(job=job, scan=scan, kind=Output.MODEL, file_path=str(dest), bounding_box=bbox,
+                              meta={"matrix": matrix.tolist(), "format": src.suffix.lower().lstrip(".")})
+        log(f"Textured 3D model kept for the viewer ({dest.stat().st_size / 1e6:.1f} MB)")
 
     dem, meta = geo.build_dem(xyz)
     np.savez_compressed(out / "dem.npz", dem=dem, **{k: np.array(v) for k, v in meta.items()})
@@ -202,11 +214,15 @@ def run_job(job):
             save_fixes(scan, fixes)
         apply_manifest(scan, manifest)
         xyz, georef = georeference(scan, xyz, fixes, cam, up, log)
+        model = None
+        if scan_file.suffix.lower() == ".glb":  # self-contained; a .gltf may reference side files
+            model = (scan_file, georef["matrix"] @ geo.enu_matrix(up))
+        georef.pop("matrix")
         if manifest.get("path_length_m"):
             scan.path_length_m = float(manifest["path_length_m"])
         elif cam is not None and len(cam) > 1:
             scan.path_length_m = float(np.linalg.norm(np.diff(cam, axis=0), axis=1).sum())
-        make_outputs(job, scan, xyz, rgb, georef, log)
+        make_outputs(job, scan, xyz, rgb, georef, log, model)
         scan.status = Scan.READY
         scan.save()
         job.state = ProcessingJob.DONE

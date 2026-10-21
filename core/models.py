@@ -109,8 +109,9 @@ class ProcessingJob(models.Model):
 
 
 class Output(models.Model):
-    POINTCLOUD, DEM, GEOTIFF, PREVIEW = "pointcloud", "dem", "geotiff", "preview"
-    KINDS = [(POINTCLOUD, "Point cloud"), (DEM, "Elevation grid"), (GEOTIFF, "GeoTIFF map"), (PREVIEW, "Map preview")]
+    POINTCLOUD, DEM, GEOTIFF, PREVIEW, MODEL = "pointcloud", "dem", "geotiff", "preview", "model"
+    KINDS = [(POINTCLOUD, "Point cloud"), (DEM, "Elevation grid"), (GEOTIFF, "GeoTIFF map"), (PREVIEW, "Map preview"),
+             (MODEL, "Textured 3D model")]
 
     job = models.ForeignKey(ProcessingJob, on_delete=models.CASCADE, related_name="outputs")
     scan = models.ForeignKey(Scan, on_delete=models.CASCADE, related_name="outputs")

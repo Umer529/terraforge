@@ -13,7 +13,9 @@ Working prototype of the full TerraForge flow from the FYP report:
 | Web dashboard (Three.js, Leaflet) | `templates/`, `static/js/` — layout of the dashboard wireframe: scan list, 3D viewer, map with GeoTIFF overlay, measurement tools, scan details |
 | Database (PostgreSQL planned) | SQLite for the demo, same tables as the data dictionary (`core/models.py`) |
 
-Not built yet (FYP-II): photogrammetry fusion (Meshroom/AliceVision), GLB model export, PostgreSQL + Celery deployment, accuracy evaluation against survey data.
+Textured GLB models (from 3d Scanner App / Polycam) are shown in the viewer; producing them from our own app's photos is FYP-II work.
+
+Not built yet (FYP-II): photogrammetry fusion (Meshroom/AliceVision), texturing our own app's mesh, PostgreSQL + Celery deployment, accuracy evaluation against survey data.
 
 ## Setup (once)
 
@@ -51,12 +53,14 @@ Use `reset_demo.bat` beforehand if you want to upload everything live.
 ## Using a real iPhone scan (borrowed LiDAR iPhone, no Mac needed)
 
 1. On the iPhone install **3d Scanner App** (free) or **Polycam**. Scan in LiDAR mode — walk slowly around a soil heap, a ramp or a pit, 1–2 m away.
-2. Export: 3d Scanner App → *Share → Point Cloud → PLY* (or *LAS*); Polycam → *Export → Point cloud → PLY/LAS*. AirDrop/WhatsApp/Drive the file to the laptop.
+2. Export, then AirDrop/WhatsApp/Drive the file to the laptop:
+   - **Best looking: textured model** — 3d Scanner App → *Share → GLB* (Polycam → *Export → GLB*). The dashboard shows the photo-textured model ("Textured model" in the viewer) and samples ~1.2 M real-coloured points from it for measurement.
+   - Point cloud — 3d Scanner App → *Share → Point Cloud → PLY* (or *LAS*); Polycam → *Export → Point cloud → PLY/LAS*.
 3. Dashboard → **Upload** (as `operator`) → choose the file → *Use site centre* or type the latitude/longitude of where you scanned (Google Maps long-press gives it) → Upload.
 4. Up axis: leave *Auto* (PLY/OBJ = y-up from ARKit, LAS = z-up). If the scan appears standing on its side, re-upload with the other option.
 5. Scan the same heap twice (e.g. before and after moving some soil) to demo **Compare** on real data.
 
-Supported: `.ply .las .laz .obj .xyz` and TerraForge `.zip` packages.
+Supported: `.glb` (textured model), `.ply .las .laz .obj .xyz` and TerraForge `.zip` packages.
 
 ## Accuracy note for evaluators
 

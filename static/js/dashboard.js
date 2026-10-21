@@ -190,6 +190,12 @@ async function main() {
   viewer = new CloudViewer($("#viewer"));
   const { points } = await viewer.load(scan.outputs.pointcloud.url);
   $("#cloud-info").textContent = `${points.toLocaleString()} points · ${scan.title}`;
+  if (scan.outputs.model) {
+    await viewer.loadModel(scan.outputs.model.url, scan.outputs.model.meta.matrix);
+    viewer.showLayer("model");
+    $("#layer").hidden = false;
+    $("#layer").addEventListener("change", (e) => viewer.showLayer(e.target.value));
+  }
   $("#point-size").addEventListener("input", (e) => viewer.setPointSize(+e.target.value));
   $("#color-mode").addEventListener("change", (e) => viewer.colorBy(e.target.value));
   wireTools();

@@ -1,6 +1,7 @@
 // Three.js point cloud viewer with point picking (local ENU metres, z up).
 import * as THREE from "three";
 import { OrbitControls } from "three/OrbitControls";
+import { GLTFLoader } from "three/GLTFLoader";
 
 const RAMP = [[47, 79, 140], [52, 146, 168], [118, 186, 110], [222, 205, 96], [205, 120, 58], [140, 70, 50]];
 
@@ -84,6 +85,35 @@ export class CloudViewer {
     return { points: n, object: pts };
   }
 
+  // Textured mesh (GLB). Materials are made unlit so the photo texture shows its true colours.
+  async loadModel(url, matrix) {
+    const gltf = await new GLTFLoader().loadAsync(url);
+    const root = gltf.scene;
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      const old = o.material;
+      o.material = new THREE.MeshBasicMaterial({ map: old.map || null, color: old.map ? 0xffffff : (old.color || 0xb0a890),
+        vertexColors: !!o.geometry.getAttribute("color") && !old.map, side: THREE.DoubleSide });
+      old.dispose();
+    });
+    const m = new THREE.Matrix4();
+    m.set(...matrix.flat());
+    const group = new THREE.Group();
+    group.add(root);
+    group.applyMatrix4(m);
+    group.visible = false;
+    this.scene.add(group);
+    this.model = group;
+    return group;
+  }
+
+  // "points" or "model"
+  showLayer(which) {
+    if (this.model) this.model.visible = which === "model";
+    this.clouds.forEach((c) => (c.visible = which === "points"));
+    this.render();
+  }
+
   fit(obj) {
     obj.geometry.computeBoundingBox();
     const box = obj.geometry.boundingBox.clone().applyMatrix4(obj.matrixWorld);
@@ -139,6 +169,11 @@ export class CloudViewer {
     ray.setFromCamera(ndc, this.camera);
     const dist = this.camera.position.distanceTo(this.controls.target);
     ray.params.Points.threshold = dist * 0.006;
+    if (this.model?.visible) {
+      const hit = ray.intersectObject(this.model, true)[0];
+      if (hit) this.onPick([hit.point.x, hit.point.y, hit.point.z]);
+      return;
+    }
     const hits = ray.intersectObjects(this.clouds.filter((c) => c.visible), false);
     if (!hits.length) return;
     // closest to the ray among the nearest few hits, then snap to the actual LiDAR point
