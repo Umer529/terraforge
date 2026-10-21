@@ -16,6 +16,7 @@
   --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   background: var(--bg);

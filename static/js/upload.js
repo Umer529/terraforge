@@ -93,7 +93,7 @@ form.addEventListener("submit", async (e) => {
     upload = await api("/api/uploads", {
       method: "POST",
       body: JSON.stringify({
-        site_id: +fd.get("site_id"), filename: file.name, size: file.size, chunk_size: 2 * 1024 * 1024,
+        site_id: +fd.get("site_id"), filename: file.name, size: file.size, chunk_size: 1024 * 1024,
         title: fd.get("title"), notes: fd.get("notes"), latitude: fd.get("latitude"), longitude: fd.get("longitude"),
         up_axis: fd.get("up_axis"), device_model: "Browser upload",
         captured_at: new Date(file.lastModified).toISOString(),
@@ -108,6 +108,7 @@ form.addEventListener("submit", async (e) => {
 });
 
 $("#pause").addEventListener("click", () => {
+  if (!running) return;
   paused = true;
   $("#pause").hidden = true;
   $("#resume").hidden = false;

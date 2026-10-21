@@ -46,7 +46,10 @@ function renderDetails(scan) {
   ];
   if (pc) rows.push(["Points", Number(pc.meta.count).toLocaleString()], ["Frame", esc(pc.crs)]);
   if (dem) rows.push(["Grid", `${fmt(dem.meta.cell * 100, 0)} cm cells, ${fmt(dem.meta.covered_m2, 0)} m² covered`]);
-  if (geo.method && geo.method !== "none") rows.push(["Georeference", `${esc(geo.method)}<br><span class="muted">±${geo.rms_m ?? "?"} m (GPS), heading ${geo.rotation_deg}°</span>`]);
+  if (geo.method && geo.method !== "none") {
+    const acc = geo.rms_m != null ? `±${geo.rms_m} m (GPS), heading ${geo.rotation_deg}°` : "manual location, accuracy unknown";
+    rows.push(["Georeference", `${esc(geo.method)}<br><span class="muted">${acc}</span>`]);
+  }
   if (scan.outputs.geotiff) rows.push(["Map CRS", scan.outputs.geotiff.crs]);
   const dl = [];
   if (scan.outputs.geotiff) dl.push(`<a href="${scan.outputs.geotiff.url}">GeoTIFF</a>`);

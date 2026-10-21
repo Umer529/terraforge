@@ -57,6 +57,10 @@ def unpack(scan, log):
     if zipfile.is_zipfile(pkg):
         with zipfile.ZipFile(pkg) as zf:
             zf.extractall(work)
+        # iOS zips the session folder itself, so the files may sit one level down
+        found = next(iter(sorted(work.rglob("manifest.json"))), None)
+        if found:
+            work = found.parent
         if (work / "manifest.json").exists():
             manifest = json.loads((work / "manifest.json").read_text())
         if (work / "location_fixes.csv").exists():
@@ -109,8 +113,9 @@ def georeference(scan, xyz, fixes, cam, up_axis, log):
         cam_enu = geo.to_enu(cam, up_axis)[:, :2] if cam is not None else None
         xyz, info = geo.georeference(xyz, fixes, cam_enu)
         scan.origin_lat, scan.origin_lon, scan.origin_alt = info["lat0"], info["lon0"], info["alt0"]
+        err = f"~{info['rms_m']} m" if info["rms_m"] is not None else "unknown (manual location)"
         log(f"Georeferenced: {info['method']}, heading correction {info['rotation_deg']} deg, "
-            f"error ~{info['rms_m']} m, origin {info['lat0']:.6f}, {info['lon0']:.6f}")
+            f"position error {err}, origin {info['lat0']:.6f}, {info['lon0']:.6f}")
         return xyz, info
     centre = np.array([*xyz[:, :2].mean(0), 0.0])
     xyz = xyz - centre
