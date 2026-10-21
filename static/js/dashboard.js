@@ -7,7 +7,9 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 
 // ------------------------------------------------------------------ map
 const map = L.map("map", { zoomControl: true, attributionControl: true });
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 22, maxNativeZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+// Satellite basemap (OSM's volunteer tile servers block localhost apps).
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 22, maxNativeZoom: 19, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" }).addTo(map);
 map.setView([31.4815, 74.303], 16);
 
 async function showSites() {
