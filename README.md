@@ -33,7 +33,7 @@ start_demo.bat
 ```
 Opens two windows (server + worker) and the browser at http://127.0.0.1:8000. Keep both windows open.
 
-## Demo script (≈ 8 minutes)
+## Demo script (≈ 10 minutes)
 
 1. **Architecture** (1 min) — show the report's architecture diagram, then the two console windows: REST server and worker are separate processes, as designed.
 2. **Upload like the phone, with a signal drop** (2 min) — in a third terminal:
@@ -44,9 +44,14 @@ Opens two windows (server + worker) and the browser at http://127.0.0.1:8000. Ke
    The first run stops after 3 chunks; the second asks the server what it has and **resumes from chunk 4**. Watch the worker window process the job.
 3. **Dashboard** (2 min) — log in as `reviewer`. Show the scan list, the 3D point cloud (rotate/zoom), the elevation map on the map, the GPS track, scan details and the processing log, and the GeoTIFF download (open it in QGIS if available).
 4. **Measure** (2 min) — Distance: click two points. Volume: click around the base of the stockpile, then Finish. The synthetic pile is **14.14 m³**; the tool gives ≈ 14.5 m³ ± 0.8. Measurements are saved with the scan.
-5. **Compare** (1 min) — upload `scan_day2.zip`, open Compare, choose day 1 → day 2. The two captures have different start points and headings; ICP aligns them and the cut is **≈ 10.7 m³ against a true 10.45 m³**.
-6. **Roles** — log in as `operator` (can upload) vs `reviewer` (no Upload menu); `admin` gets *Users & sites* (Django admin).
-7. **iOS code** — open `ios/TerraForge/CaptureController.swift` and `APIClient.swift` and walk through the capture and upload code.
+5. **LiDAR + camera fusion** (1 min) — upload the app-style package (untextured LiDAR mesh + 89 posed photos):
+   ```
+   .venv\Scripts\python tools\phone_upload.py sample_data\scan_lidar_photos.zip
+   ```
+   The worker log shows "Fused 89 photos with LiDAR"; the scan opens as a photo-coloured 3D model (*Textured model* in the viewer). Grey areas are surfaces no photo saw.
+6. **Compare** (1 min) — upload `scan_day2.zip`, open Compare, choose day 1 → day 2. The two captures have different start points and headings; ICP aligns them and the cut is **≈ 10.7 m³ against a true 10.45 m³**.
+7. **Roles** — log in as `operator` (can upload) vs `reviewer` (no Upload menu); `admin` gets *Users & sites* (Django admin).
+8. **iOS code** — open `ios/TerraForge/CaptureController.swift` and `APIClient.swift` and walk through the capture and upload code.
 
 Use `reset_demo.bat` beforehand if you want to upload everything live.
 

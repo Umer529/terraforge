@@ -24,6 +24,7 @@ struct SessionManifest: Codable {
     var scanFile = "mesh.ply"
     var pathLengthM: Double
     var gpsFixes: Int
+    var photos = 0
     var siteId: Int?
 
     enum CodingKeys: String, CodingKey {
@@ -34,6 +35,7 @@ struct SessionManifest: Codable {
         case scanFile = "scan_file"
         case pathLengthM = "path_length_m"
         case gpsFixes = "gps_fixes"
+        case photos
         case siteId = "site_id"
     }
 }

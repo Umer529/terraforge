@@ -1,16 +1,21 @@
 """Processing worker pipeline (Chapter 5, "Processing Worker").
 
 Each stage is a plain function with clear inputs and outputs and writes a
-line to the job log, so a failure can be traced to its stage. The demo
-builds the LiDAR-only model (the "fast preview" path in the report); the
-photogrammetry fusion stage slots in after `load` in a later iteration.
+line to the job log, so a failure can be traced to its stage:
+
+    unpack -> load (LiDAR mesh/points) -> fuse photos -> clean -> georeference
+    -> elevation grid -> GeoTIFF + map preview -> viewer outputs
+
+Photo fusion uses the ARKit pose saved with every photo, so photos are
+projected straight onto the LiDAR geometry (no feature matching needed).
+Full photogrammetry (Meshroom) to refine the geometry is planned for FYP-II.
 
 Scan package (zip) written by the iOS app:
     manifest.json         title, captured_at, device_model, up_axis, scan_file, ...
     location_fixes.csv    timestamp,latitude,longitude,altitude,horizontal_accuracy,cam_x,cam_y,cam_z
-    <scan_file>           LiDAR mesh / point cloud (.ply, .obj, .las, ...)
-    photos/               optional, counted only in the demo
-A bare .ply/.las/.obj/.xyz export (e.g. from 3d Scanner App) is accepted too.
+    <scan_file>           LiDAR mesh (.ply with faces) or point cloud (.ply, .las, ...)
+    photos/img_NNNN.jpg   camera photo + img_NNNN.json (ARKit pose, intrinsics, resolution)
+A bare .glb/.ply/.las/.obj/.xyz export (e.g. from 3d Scanner App) is accepted too.
 """
 import csv
 import json
@@ -76,13 +81,25 @@ def unpack(scan, log):
                         cam.append([float(row["cam_x"]), float(row["cam_y"]), float(row["cam_z"])])
         name = manifest.get("scan_file")
         scan_file = work / name if name else next(p for p in sorted(work.rglob("*")) if p.suffix.lower() in geo.POINT_EXTS)
-        photos = len(list((work / "photos").glob("*"))) if (work / "photos").exists() else 0
-        log(f"Unpacked package: {scan_file.name}, {len(fixes)} GPS fixes, {photos} photos")
+        photos = posed_photos(work / "photos")
+        log(f"Unpacked package: {scan_file.name}, {len(fixes)} GPS fixes, {len(photos)} posed photos")
     else:
-        scan_file = pkg
+        scan_file, photos = pkg, []
         log(f"Received bare export {pkg.name} (no manifest)")
     up = manifest.get("up_axis") or scan.upload.options.get("up_axis") or geo.default_up_axis(scan_file)
-    return scan_file, manifest, fixes, (np.array(cam) if len(cam) == len(fixes) and cam else None), up
+    return scan_file, manifest, fixes, (np.array(cam) if len(cam) == len(fixes) and cam else None), up, photos
+
+
+def posed_photos(folder):
+    """Photos written by the app: img_0001.jpg + img_0001.json (ARKit pose and intrinsics)."""
+    if not folder.exists():
+        return []
+    out = []
+    for jpg in sorted(folder.glob("*.jpg")):
+        meta = jpg.with_suffix(".json")
+        if meta.exists():
+            out.append((jpg, json.loads(meta.read_text())))
+    return out
 
 
 def _num(v):
@@ -93,12 +110,35 @@ def _num(v):
 
 
 def load(scan_file, up_axis, log):
-    xyz, rgb = geo.load_points(scan_file)
+    """Points (and the LiDAR mesh, if the file has faces) in the file's own axes."""
+    mesh = geo.load_lidar_mesh(scan_file)
+    if mesh is not None:
+        xyz, rgb = geo.sample_mesh(mesh), None
+        log(f"Loaded LiDAR mesh: {len(mesh.vertices):,} vertices, {len(mesh.faces):,} faces, "
+            f"{mesh.area:,.0f} m2 -> sampled {len(xyz):,} surface points")
+    else:
+        xyz, rgb = geo.load_points(scan_file)
+        log(f"Loaded {len(xyz):,} points ({'with' if rgb is not None else 'no'} colour), up axis = {up_axis}")
     if len(xyz) < 100:
         raise ValueError(f"only {len(xyz)} points in {scan_file.name}")
-    xyz = geo.to_enu(xyz, up_axis)
-    log(f"Loaded {len(xyz):,} points ({'with' if rgb is not None else 'no'} colour), up axis = {up_axis}")
-    return xyz, rgb
+    return xyz, rgb, mesh
+
+
+def fuse_photos(scan, xyz, mesh, photos, log):
+    """Combine camera photos with the LiDAR geometry: colour points and mesh from the posed photos."""
+    rgb, covered = geo.colorize_from_photos(xyz, photos)
+    log(f"Fused {len(photos)} photos with LiDAR: {covered.mean() * 100:.0f}% of points coloured from photos")
+    model = None
+    if mesh is not None:
+        vrgb, vcov = geo.colorize_from_photos(np.asarray(mesh.vertices, float), photos)
+        vrgb[~vcov] = 150
+        model = scan_dir(scan) / "fused_model.glb"
+        geo.write_colored_glb(mesh, vrgb, model)
+        log(f"Built photo-coloured LiDAR mesh ({vcov.mean() * 100:.0f}% of vertices seen in photos)")
+    if not covered.any():
+        return None, model
+    rgb[~covered] = 150  # surfaces no photo saw stay neutral grey
+    return rgb, model
 
 
 def clean(xyz, rgb, log):
@@ -204,8 +244,13 @@ def run_job(job):
     job.save(update_fields=["started_at"])
     Scan.objects.filter(pk=scan.pk).update(status=Scan.PROCESSING)
     try:
-        scan_file, manifest, fixes, cam, up = unpack(scan, log)
-        xyz, rgb = load(scan_file, up, log)
+        scan_file, manifest, fixes, cam, up, photos = unpack(scan, log)
+        xyz, rgb, mesh = load(scan_file, up, log)
+        model_file = scan_file if scan_file.suffix.lower() == ".glb" else None  # self-contained textured export
+        if photos:
+            rgb, fused = fuse_photos(scan, xyz, mesh, photos, log)
+            model_file = fused or model_file
+        xyz = geo.to_enu(xyz, up)
         xyz, rgb = clean(xyz, rgb, log)
         if not fixes:
             fixes = [{"latitude": f.latitude, "longitude": f.longitude, "altitude": f.altitude,
@@ -214,10 +259,8 @@ def run_job(job):
             save_fixes(scan, fixes)
         apply_manifest(scan, manifest)
         xyz, georef = georeference(scan, xyz, fixes, cam, up, log)
-        model = None
-        if scan_file.suffix.lower() == ".glb":  # self-contained; a .gltf may reference side files
-            model = (scan_file, georef["matrix"] @ geo.enu_matrix(up))
-        georef.pop("matrix")
+        matrix = georef.pop("matrix")
+        model = (model_file, matrix @ geo.enu_matrix(up)) if model_file else None
         if manifest.get("path_length_m"):
             scan.path_length_m = float(manifest["path_length_m"])
         elif cam is not None and len(cam) > 1:

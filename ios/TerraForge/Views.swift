@@ -96,7 +96,8 @@ struct CaptureView: View {
                 Text(capture.trackingMessage).font(.caption).padding(6).background(.ultraThinMaterial, in: Capsule())
                 HStack(spacing: 24) {
                     Label(String(format: "%.0f m", capture.distanceWalked), systemImage: "figure.walk")
-                    Label("\(capture.gpsFixCount) GPS fixes", systemImage: "location")
+                    Label("\(capture.gpsFixCount) GPS", systemImage: "location")
+                    Label("\(capture.photoCount) photos", systemImage: "photo.on.rectangle")
                     Label("\(capture.meshAnchorCount) mesh", systemImage: "cube.transparent")
                 }
                 .font(.subheadline.monospacedDigit()).padding(10).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -155,6 +156,7 @@ struct ReviewView: View {
                 TextField("Notes", text: $notes, axis: .vertical)
                 LabeledContent("Walked", value: String(format: "%.0f m", session.manifest.pathLengthM))
                 LabeledContent("GPS fixes", value: "\(session.manifest.gpsFixes)")
+                LabeledContent("Photos", value: "\(session.manifest.photos)")
                 LabeledContent("Size", value: ByteCountFormatter.string(fromByteCount: session.sizeBytes, countStyle: .file))
                 Button("Save") { try? store.rename(session, title: title, notes: notes) }
             }

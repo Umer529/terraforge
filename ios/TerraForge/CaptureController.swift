@@ -4,28 +4,38 @@ import Foundation
 import RealityKit
 
 /// Capture module (report Fig. "Modules of the mobile app").
-/// ARKit scene reconstruction builds the LiDAR mesh; Core Location records GPS
-/// fixes, each paired with the AR camera position so the server can fit the
-/// walked path to the GPS track. Photos are saved with their camera pose.
+/// ARKit scene reconstruction builds the LiDAR mesh; the camera takes photos
+/// automatically while the operator walks, each saved with its exact ARKit pose
+/// and intrinsics so the server can project the photos onto the LiDAR geometry
+/// (photo + LiDAR fusion). Core Location records GPS fixes paired with the AR
+/// camera position so the server can fit the walked path to the GPS track.
 @MainActor
 final class CaptureController: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var distanceWalked: Double = 0
     @Published var gpsFixCount = 0
     @Published var meshAnchorCount = 0
+    @Published var photoCount = 0
     @Published var trackingMessage = "Move the phone slowly"
 
     static var isSupported: Bool {
         ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh)
     }
 
+    /// Auto-capture a photo after this much movement or turning (at most 2 per second).
+    static let photoEveryMetres: Float = 0.5
+    static let photoEveryDegrees: Float = 20
+
     let arView = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
     private let location = CLLocationManager()
+    private let photoQueue = DispatchQueue(label: "terraforge.photos", qos: .utility)
+    private let ciContext = CIContext()
     private var fixes: [LocationFix] = []
     private var lastCameraPosition: SIMD3<Float>?
+    private var lastPhotoPose: simd_float4x4?
+    private var lastPhotoTime: TimeInterval = 0
     private var folder: URL?
     private var startedAt = Date()
-    private var photoCount = 0
 
     override init() {
         super.init()
@@ -43,6 +53,8 @@ final class CaptureController: NSObject, ObservableObject {
         gpsFixCount = 0
         photoCount = 0
         lastCameraPosition = nil
+        lastPhotoPose = nil
+        lastPhotoTime = 0
         startedAt = Date()
 
         let config = ARWorldTrackingConfiguration()
@@ -66,28 +78,60 @@ final class CaptureController: NSObject, ObservableObject {
         arView.session.pause()
         guard let folder else { throw CaptureError.notStarted }
 
+        photoQueue.sync {} // wait until the last photos are on disk
         try MeshExporter.writePLY(anchors: anchors, to: folder.appendingPathComponent("mesh.ply"))
         try writeFixesCSV(to: folder.appendingPathComponent("location_fixes.csv"))
 
-        return SessionManifest(
+        var manifest = SessionManifest(
             title: title, notes: "", capturedAt: startedAt, deviceModel: Self.deviceModel(),
             pathLengthM: distanceWalked, gpsFixes: fixes.count)
+        manifest.photos = photoCount
+        return manifest
     }
 
-    /// Save the current camera image with its pose (used later for photogrammetry).
+    /// Manual shutter button: save the current frame now.
     func takePhoto() {
-        guard let frame = arView.session.currentFrame, let folder else { return }
-        let image = CIImage(cvPixelBuffer: frame.capturedImage)
-        guard let jpeg = CIContext().jpegRepresentation(of: image, colorSpace: CGColorSpaceCreateDeviceRGB()) else { return }
+        guard let frame = arView.session.currentFrame else { return }
+        savePhoto(frame.capturedImage, pose: frame.camera.transform, intrinsics: frame.camera.intrinsics,
+                  resolution: frame.camera.imageResolution, timestamp: frame.timestamp)
+    }
+
+    fileprivate func shouldTakePhoto(pose: simd_float4x4, time: TimeInterval) -> Bool {
+        guard isRecording, time - lastPhotoTime > 0.5 else { return false }
+        guard let last = lastPhotoPose else { return true }
+        let moved = simd_distance(SIMD3(last.columns.3.x, last.columns.3.y, last.columns.3.z),
+                                  SIMD3(pose.columns.3.x, pose.columns.3.y, pose.columns.3.z))
+        let a = -SIMD3(last.columns.2.x, last.columns.2.y, last.columns.2.z) // camera looks down -z
+        let b = -SIMD3(pose.columns.2.x, pose.columns.2.y, pose.columns.2.z)
+        let turned = acos(min(1, max(-1, simd_dot(simd_normalize(a), simd_normalize(b))))) * 180 / .pi
+        return moved > Self.photoEveryMetres || turned > Self.photoEveryDegrees
+    }
+
+    /// Save one camera image with the pose and intrinsics the server needs for fusion.
+    /// The image stays in the sensor's native (landscape) orientation, which is
+    /// the orientation ARKit's intrinsics refer to.
+    fileprivate func savePhoto(_ buffer: CVPixelBuffer, pose: simd_float4x4, intrinsics: simd_float3x3,
+                               resolution: CGSize, timestamp: TimeInterval) {
+        guard let folder else { return }
         photoCount += 1
+        lastPhotoPose = pose
+        lastPhotoTime = timestamp
         let name = String(format: "photos/img_%04d", photoCount)
-        try? jpeg.write(to: folder.appendingPathComponent(name + ".jpg"))
-        let pose = (0..<4).flatMap { c in (0..<4).map { r in frame.camera.transform[c][r] } }
-        let meta: [String: Any] = ["transform_column_major": pose,
-                                   "intrinsics": (0..<3).flatMap { c in (0..<3).map { r in frame.camera.intrinsics[c][r] } },
-                                   "timestamp": frame.timestamp]
-        if let json = try? JSONSerialization.data(withJSONObject: meta) {
-            try? json.write(to: folder.appendingPathComponent(name + ".json"))
+        let meta: [String: Any] = [
+            "transform_column_major": (0..<4).flatMap { c in (0..<4).map { r in pose[c][r] } },
+            "intrinsics": (0..<3).flatMap { c in (0..<3).map { r in intrinsics[c][r] } },
+            "width": Int(resolution.width), "height": Int(resolution.height), "timestamp": timestamp,
+        ]
+        let context = ciContext
+        photoQueue.async {
+            let image = CIImage(cvPixelBuffer: buffer)
+            let options = [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.8]
+            guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let jpeg = context.jpegRepresentation(of: image, colorSpace: space, options: options) else { return }
+            try? jpeg.write(to: folder.appendingPathComponent(name + ".jpg"))
+            if let json = try? JSONSerialization.data(withJSONObject: meta) {
+                try? json.write(to: folder.appendingPathComponent(name + ".json"))
+            }
         }
     }
 
@@ -115,23 +159,32 @@ enum CaptureError: LocalizedError {
 
 extension CaptureController: ARSessionDelegate {
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
-        let t = frame.camera.transform.columns.3
-        let position = SIMD3<Float>(t.x, t.y, t.z)
+        let pose = frame.camera.transform
+        let position = SIMD3<Float>(pose.columns.3.x, pose.columns.3.y, pose.columns.3.z)
         let meshCount = frame.anchors.filter { $0 is ARMeshAnchor }.count
+        var trackingOK = false
         let message: String
         switch frame.camera.trackingState {
-        case .normal: message = "Tracking OK"
+        case .normal: message = "Tracking OK"; trackingOK = true
         case .limited(.excessiveMotion): message = "Slow down"
         case .limited(.insufficientFeatures): message = "Point at more detail"
         case .limited: message = "Initialising…"
         case .notAvailable: message = "Tracking unavailable"
         }
+        let buffer = frame.capturedImage
+        let intrinsics = frame.camera.intrinsics
+        let resolution = frame.camera.imageResolution
+        let time = frame.timestamp
         Task { @MainActor in
             if let last = self.lastCameraPosition, self.isRecording {
                 let step = simd_distance(SIMD2(last.x, last.z), SIMD2(position.x, position.z))
                 if step > 0.05 { self.distanceWalked += Double(step); self.lastCameraPosition = position }
             } else {
                 self.lastCameraPosition = position
+            }
+            // Only photograph with good tracking, so the pose used for fusion is reliable.
+            if trackingOK && self.shouldTakePhoto(pose: pose, time: time) {
+                self.savePhoto(buffer, pose: pose, intrinsics: intrinsics, resolution: resolution, timestamp: time)
             }
             self.meshAnchorCount = meshCount
             self.trackingMessage = message
@@ -154,37 +207,52 @@ extension CaptureController: CLLocationManagerDelegate {
     }
 }
 
-/// Writes the vertices of all ARMeshAnchors, in world coordinates, as a binary PLY.
+/// Writes all ARMeshAnchors (vertices in world coordinates + triangles) as a binary PLY.
 enum MeshExporter {
     static func writePLY(anchors: [ARMeshAnchor], to url: URL) throws {
         var points: [SIMD3<Float>] = []
+        var indices: [UInt32] = []
         for anchor in anchors {
-            let source = anchor.geometry.vertices
-            let base = source.buffer.contents().advanced(by: source.offset)
-            points.reserveCapacity(points.count + source.count)
-            for i in 0..<source.count {
-                let v = base.advanced(by: i * source.stride).assumingMemoryBound(to: (Float, Float, Float).self).pointee
+            let first = UInt32(points.count)
+            let vertices = anchor.geometry.vertices
+            let vbase = vertices.buffer.contents().advanced(by: vertices.offset)
+            points.reserveCapacity(points.count + vertices.count)
+            for i in 0..<vertices.count {
+                let v = vbase.advanced(by: i * vertices.stride).assumingMemoryBound(to: (Float, Float, Float).self).pointee
                 let world = anchor.transform * SIMD4<Float>(v.0, v.1, v.2, 1)
                 points.append(SIMD3(world.x, world.y, world.z))
+            }
+            let faces = anchor.geometry.faces
+            let fbase = faces.buffer.contents()
+            for i in 0..<(faces.count * faces.indexCountPerPrimitive) {
+                let local: UInt32 = faces.bytesPerIndex == 4
+                    ? fbase.load(fromByteOffset: i * 4, as: UInt32.self)
+                    : UInt32(fbase.load(fromByteOffset: i * 2, as: UInt16.self))
+                indices.append(first + local)
             }
         }
         var data = Data("""
         ply
         format binary_little_endian 1.0
-        comment TerraForge capture (ARKit world frame, y-up)
+        comment TerraForge LiDAR mesh (ARKit world frame, y-up)
         element vertex \(points.count)
         property float x
         property float y
         property float z
+        element face \(indices.count / 3)
+        property list uchar uint vertex_indices
         end_header
 
         """.utf8)
-        points.withUnsafeBufferPointer { buf in
-            for p in buf {
-                withUnsafeBytes(of: p.x) { data.append(contentsOf: $0) }
-                withUnsafeBytes(of: p.y) { data.append(contentsOf: $0) }
-                withUnsafeBytes(of: p.z) { data.append(contentsOf: $0) }
-            }
+        data.reserveCapacity(data.count + points.count * 12 + indices.count / 3 * 13)
+        for p in points {
+            withUnsafeBytes(of: p.x) { data.append(contentsOf: $0) }
+            withUnsafeBytes(of: p.y) { data.append(contentsOf: $0) }
+            withUnsafeBytes(of: p.z) { data.append(contentsOf: $0) }
+        }
+        for f in stride(from: 0, to: indices.count, by: 3) {
+            data.append(3)
+            for k in 0..<3 { withUnsafeBytes(of: indices[f + k].littleEndian) { data.append(contentsOf: $0) } }
         }
         try data.write(to: url, options: .atomic)
     }

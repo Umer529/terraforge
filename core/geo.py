@@ -89,6 +89,95 @@ def sample_textured_model(path, count=MODEL_SAMPLES):
     return np.vstack(xyz).astype(np.float64), np.vstack(rgb).astype(np.uint8)
 
 
+def load_lidar_mesh(path):
+    """Triangle mesh from a .ply/.obj with faces (the app's LiDAR mesh), else None."""
+    if Path(path).suffix.lower() not in {".ply", ".obj"}:
+        return None
+    if Path(path).suffix.lower() == ".ply":
+        from plyfile import PlyData
+
+        if "face" not in [e.name for e in PlyData.read(str(path)).elements]:
+            return None
+    import trimesh
+
+    mesh = trimesh.load(str(path), force="mesh", process=False)
+    return mesh if len(getattr(mesh, "faces", [])) else None
+
+
+def sample_mesh(mesh, count=MODEL_SAMPLES):
+    import trimesh
+
+    pts, _ = trimesh.sample.sample_surface(mesh, count)
+    return np.asarray(pts, dtype=np.float64)
+
+
+# --------------------------------------------------------------------------- photo fusion
+
+def read_photo_pose(meta):
+    """Camera-to-world 4x4 and intrinsics 3x3 from the app's photo JSON (ARKit, column-major)."""
+    cam_to_world = np.asarray(meta["transform_column_major"], float).reshape(4, 4).T
+    k = np.asarray(meta["intrinsics"], float).reshape(3, 3).T
+    return cam_to_world, k
+
+
+def project(xyz, cam_to_world, k):
+    """ARKit camera: x right, y up, looking down -z. Returns pixel u, v and depth."""
+    world_to_cam = np.linalg.inv(cam_to_world)
+    pc = xyz @ world_to_cam[:3, :3].T + world_to_cam[:3, 3]
+    depth = -pc[:, 2]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        u = k[0, 2] + k[0, 0] * pc[:, 0] / depth
+        v = k[1, 2] - k[1, 1] * pc[:, 1] / depth
+    return u, v, depth
+
+
+def colorize_from_photos(xyz, photos, max_depth=8.0, cell_px=4):
+    """Colour points (in the ARKit world frame) from posed photos.
+
+    For each photo the points are projected with the ARKit pose and
+    intrinsics; a coarse depth buffer removes points hidden behind nearer
+    surfaces, and each point takes its colour from the photo that sees it from
+    closest. photos: list of (image_path, meta_dict).
+    Returns (rgb uint8 Nx3, covered bool N).
+    """
+    n = len(xyz)
+    rgb = np.zeros((n, 3), np.uint8)
+    best = np.full(n, np.inf)
+    for image_path, meta in photos:
+        cam_to_world, k = read_photo_pose(meta)
+        img = np.asarray(Image.open(image_path).convert("RGB"))
+        h, w = img.shape[:2]
+        if meta.get("width"):  # intrinsics refer to the capture resolution
+            k = k.copy()
+            k[0] *= w / meta["width"]
+            k[1] *= h / meta["height"]
+        u, v, d = project(xyz, cam_to_world, k)
+        ok = (d > 0.1) & (d < max_depth) & (u >= 0) & (u < w) & (v >= 0) & (v < h)
+        idx = np.flatnonzero(ok)
+        if not len(idx):
+            continue
+        ui, vi, di = u[idx].astype(int), v[idx].astype(int), d[idx]
+        cols = w // cell_px + 1
+        cell = (vi // cell_px) * cols + ui // cell_px
+        zbuf = np.full(cols * (h // cell_px + 1), np.inf)
+        np.minimum.at(zbuf, cell, di)
+        visible = di <= zbuf[cell] + 0.03 + 0.02 * di
+        take = visible & (di < best[idx])
+        sel = idx[take]
+        rgb[sel] = img[vi[take], ui[take]]
+        best[sel] = di[take]
+    return rgb, np.isfinite(best)
+
+
+def write_colored_glb(mesh, vertex_rgb, path):
+    """LiDAR mesh with per-vertex photo colours, as GLB for the browser."""
+    import trimesh
+
+    colored = trimesh.Trimesh(mesh.vertices, mesh.faces, process=False,
+                              vertex_colors=np.column_stack([vertex_rgb, np.full(len(vertex_rgb), 255)]).astype(np.uint8))
+    colored.export(str(path))
+
+
 def _surface_colors(mesh, pts, face):
     """Colour of each surface sample from the texture (UV lookup) or vertex colours."""
     import trimesh
