@@ -5,7 +5,7 @@ import Foundation
 /// REST client for the TerraForge backend (token auth, chunked resumable upload).
 @MainActor
 final class APIClient: ObservableObject {
-    @Published var serverURL: URL = URL(string: UserDefaults.standard.string(forKey: "server") ?? "http://192.168.1.10:8000")!
+    @Published var serverURL: URL = URL(string: UserDefaults.standard.string(forKey: "server") ?? "https://terraforge-api.onrender.com")!
     @Published private(set) var token: String? = UserDefaults.standard.string(forKey: "token")
     @Published private(set) var username: String? = UserDefaults.standard.string(forKey: "username")
 

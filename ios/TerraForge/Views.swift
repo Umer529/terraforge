@@ -7,7 +7,7 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var api: APIClient
-    @State private var server = UserDefaults.standard.string(forKey: "server") ?? "http://192.168.1.10:8000"
+    @State private var server = UserDefaults.standard.string(forKey: "server") ?? "https://terraforge-api.onrender.com"
     @State private var username = "operator"
     @State private var password = ""
     @State private var error: String?
