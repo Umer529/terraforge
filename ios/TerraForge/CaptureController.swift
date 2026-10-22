@@ -1,6 +1,9 @@
 import ARKit
+import Combine
+import CoreImage
 import CoreLocation
 import Foundation
+import ImageIO
 import RealityKit
 
 /// Capture module (report Fig. "Modules of the mobile app").
@@ -125,7 +128,9 @@ final class CaptureController: NSObject, ObservableObject {
         let context = ciContext
         photoQueue.async {
             let image = CIImage(cvPixelBuffer: buffer)
-            let options = [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.8]
+            let options: [CIImageRepresentationOption: Any] = [
+                CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): 0.8
+            ]
             guard let space = CGColorSpace(name: CGColorSpace.sRGB),
                   let jpeg = context.jpegRepresentation(of: image, colorSpace: space, options: options) else { return }
             try? jpeg.write(to: folder.appendingPathComponent(name + ".jpg"))

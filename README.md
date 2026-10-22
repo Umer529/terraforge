@@ -33,6 +33,12 @@ start_demo.bat
 ```
 Opens two windows (server + worker) and the browser at http://127.0.0.1:8000. Keep both windows open.
 
+## Free remote demo deployment (Render)
+
+The repository includes `render.yaml`, `build.sh`, and `start.sh` for a Render free web service. Create a Render account, choose **New → Blueprint**, connect this repository, and deploy. Render provides the `https://...onrender.com` URL to enter in the iOS app login screen.
+
+This is suitable for a short demo only: the free service sleeps when idle and its local SQLite database and scan files are not durable across rebuilds or instance replacement. Use PostgreSQL plus object storage before relying on it for real scans.
+
 ## Demo script (≈ 10 minutes)
 
 1. **Architecture** (1 min) — show the report's architecture diagram, then the two console windows: REST server and worker are separate processes, as designed.

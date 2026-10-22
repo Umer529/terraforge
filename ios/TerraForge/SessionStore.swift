@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// A capture kept on the phone: Documents/Sessions/<id>/
@@ -90,7 +91,8 @@ final class SessionStore: ObservableObject {
         NSFileCoordinator().coordinate(readingItemAt: session.folder, options: [.forUploading], error: &coordError) { zipURL in
             do { try FileManager.default.copyItem(at: zipURL, to: dest) } catch { copyError = error }
         }
-        if let e = coordError ?? copyError { throw e }
+        if let coordError { throw coordError }
+        if let copyError { throw copyError }
         return dest
     }
 

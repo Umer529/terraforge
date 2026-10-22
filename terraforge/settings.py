@@ -5,12 +5,14 @@ database-polling worker instead of Celery. Both sit behind the same model
 and job-state design, so swapping them later does not change the API.
 """
 from pathlib import Path
+import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "terraforge-demo-only-change-me"
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "terraforge-demo-only-change-me")
+DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
+ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",") if h]
+CSRF_TRUSTED_ORIGINS = [u for u in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if u]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -24,6 +26,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -69,6 +72,11 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "login"
@@ -78,6 +86,7 @@ LOGOUT_REDIRECT_URL = "login"
 # Scan packages and outputs live outside the web root and are only served
 # through views that check access (Security and Data Policy, Ch. 5).
 STORAGE_ROOT = BASE_DIR / "storage"
+STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
 
 # Upload chunks arrive as raw request bodies.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024

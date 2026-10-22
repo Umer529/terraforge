@@ -1,0 +1,21 @@
+// Replace this with your own unique identifier before device signing/upload.
+PRODUCT_BUNDLE_IDENTIFIER = com.example.TerraForge
+PRODUCT_NAME = $(TARGET_NAME)
+MARKETING_VERSION = 1.0
+CURRENT_PROJECT_VERSION = 1
+
+// Select your Team in Xcode > target > Signing & Capabilities.
+CODE_SIGN_STYLE = Automatic
+
+IPHONEOS_DEPLOYMENT_TARGET = 17.0
+TARGETED_DEVICE_FAMILY = 1
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+SUPPORTS_MACCATALYST = NO
+SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
+SWIFT_VERSION = 5.0
+SWIFT_STRICT_CONCURRENCY = minimal
+SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated
+
+GENERATE_INFOPLIST_FILE = NO
+INFOPLIST_FILE = TerraForge/Info.plist
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks

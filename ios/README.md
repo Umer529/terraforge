@@ -11,17 +11,23 @@ an iPhone/iPad with a LiDAR sensor (iPhone 12 Pro or later Pro models) to run.
 | `Views.swift` | Screens: Log in, Scan Library, Capture, Review and Upload |
 | `Models.swift` | Manifest, GPS fix, upload record |
 
+## Project prepared on Windows
+
+`TerraForge.xcodeproj` is included in this folder. It already lists the six Swift files, sets Swift 5 and iOS 17, and includes `Info.plist` with camera, location, local-network, and LiDAR requirements. Open this project directly in Xcode; do not create a second project or drag the files in again.
+
 ## Building on a Mac
 
-1. Xcode → New Project → iOS App, name `TerraForge`, interface SwiftUI.
-2. Delete the generated `ContentView.swift` and app file; drag the files from this folder in.
-3. Info.plist keys:
+1. Open `TerraForge.xcodeproj`.
+2. Select the TerraForge target → **Signing & Capabilities**. Turn on **Automatically manage signing**, choose your Apple team, and replace `com.example.TerraForge` with a unique bundle identifier.
+3. The project already contains the Info.plist keys:
    - `NSCameraUsageDescription` = "Used to capture the LiDAR scan"
    - `NSLocationWhenInUseUsageDescription` = "Used to georeference the scan"
    - For a local test server over http, add `NSAppTransportSecurity` → `NSAllowsLocalNetworking` = YES
-4. Select your iPhone as the run target (the simulator has no LiDAR), set a signing team and run.
+4. Select your iPhone as the run target (the simulator has no LiDAR), trust the developer profile on the phone if asked, and run.
 5. If Xcode reports Swift 6 concurrency errors (e.g. "non-Sendable CVPixelBuffer"), set
    Build Settings → *Swift Language Version* to **Swift 5**.
+
+The project cannot be compiled on Windows because Xcode, the iOS SDK, and Apple code signing only run on macOS. The Mac is needed only for the Xcode build/sign/install step.
 
 ## Package format sent to the server
 
