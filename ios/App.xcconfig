@@ -1,8 +1,8 @@
-// Replace this with your own unique identifier before device signing/upload.
-PRODUCT_BUNDLE_IDENTIFIER = com.example.TerraForge
+PRODUCT_BUNDLE_IDENTIFIER = com.umer529.terraforge
 PRODUCT_NAME = $(TARGET_NAME)
 MARKETING_VERSION = 1.0
 CURRENT_PROJECT_VERSION = 1
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
 
 // Select your Team in Xcode > target > Signing & Capabilities.
 CODE_SIGN_STYLE = Automatic

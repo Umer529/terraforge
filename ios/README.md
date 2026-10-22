@@ -15,19 +15,21 @@ an iPhone/iPad with a LiDAR sensor (iPhone 12 Pro or later Pro models) to run.
 
 `TerraForge.xcodeproj` is included in this folder. It already lists the six Swift files, sets Swift 5 and iOS 17, and includes `Info.plist` with camera, location, local-network, and LiDAR requirements. Open this project directly in Xcode; do not create a second project or drag the files in again.
 
-## Building on a Mac
+## One-command iPhone build
 
-1. Open `TerraForge.xcodeproj`.
-2. Select the TerraForge target → **Signing & Capabilities**. Turn on **Automatically manage signing**, choose your Apple team, and replace `com.example.TerraForge` with a unique bundle identifier.
-3. The project already contains the Info.plist keys:
-   - `NSCameraUsageDescription` = "Used to capture the LiDAR scan"
-   - `NSLocationWhenInUseUsageDescription` = "Used to georeference the scan"
-   - For a local test server over http, add `NSAppTransportSecurity` → `NSAllowsLocalNetworking` = YES
-4. Select your iPhone as the run target (the simulator has no LiDAR), trust the developer profile on the phone if asked, and run.
-5. If Xcode reports Swift 6 concurrency errors (e.g. "non-Sendable CVPixelBuffer"), set
-   Build Settings → *Swift Language Version* to **Swift 5**.
+The builder needs a Mac with Xcode installed and the paid Apple Developer team already signed in to Xcode. The team owner must authorize that Mac/account and provide the 10-character Team ID. The project bundle ID is `com.umer529.terraforge`; if that identifier is already taken under the team, the team owner must change it in `App.xcconfig` before building.
 
-The project cannot be compiled on Windows because Xcode, the iOS SDK, and Apple code signing only run on macOS. The Mac is needed only for the Xcode build/sign/install step.
+After cloning the repo, the builder runs:
+
+```sh
+cd terraforge/ios
+chmod +x build-iphone.sh
+./build-iphone.sh YOUR_TEAM_ID
+```
+
+The signed Xcode archive is written to `ios/build/TerraForge.xcarchive`. The builder can send that archive to the paid-account owner. In Xcode Organizer, the owner can distribute it to TestFlight, or export an Ad Hoc IPA after registering the target iPhone's UDID in the developer account. A raw `.app` or `.xcarchive` cannot simply be tapped on an iPhone to install it. For TestFlight, the owner uploads the archive and invites the tester; for Ad Hoc, the phone must be registered and the exported IPA installed using Apple Configurator or a Mac.
+
+The account owner must do the initial team authorization and final distribution. Do not share their Apple password or signing certificates. Xcode, the iOS SDK, and Apple signing only run on macOS.
 
 ## Package format sent to the server
 
